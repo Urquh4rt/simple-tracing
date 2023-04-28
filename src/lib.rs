@@ -1,12 +1,13 @@
 extern crate lazy_static;
 use std::sync::Mutex;
-use std::time::{Instant};
+use std::time::{Instant, Duration};
+use std::collections::LinkedList;
 
 use std::fs;
 
 lazy_static::lazy_static! {
     static ref PROGRAM_START: Mutex<Instant> = Mutex::new(Instant::now());
-    static ref TRACE_BUFFER: Mutex<String> = Mutex::new("{\n\t\"traceEvents\": [ \n".to_string());
+    static ref TRACE_BUFFER: Mutex<LinkedList<(Duration, Duration, &'static str)>> = Mutex::new(LinkedList::new());
 }
 
 use ctor::ctor;
@@ -17,20 +18,27 @@ fn init() {
 use ctor::dtor;
 #[dtor]
 fn deinit() {
-    let mut result = TRACE_BUFFER.lock().unwrap().to_string();
+    let mut result = "{\n\t\"traceEvents\": [ \n".to_string();
+    for (time_stamp, duration, name) in TRACE_BUFFER.lock().unwrap().iter() {
+        result += "\t{ \"pid\":1, \"tid\":1, \"ts\":";
+        result += &time_stamp.as_micros().to_string();
+        result += ", \"dur\":";
+        result += &duration.as_micros().to_string();
+        result += ", \"ph\":\"X\", \"name\":\"";
+        result += name;
+        result += "\" },\n";
+    }
     result += "\n\t{ \"pid\":1, \"tid\":1, \"ts\":0, \"dur\":0, \"ph\":\"X\", \"name\":\"dummy\" }\n\t],\n\t\"meta_user\": \"aras\",\n\t\"meta_cpu_count\": \"8\"\n}";
-    // println!("{}", result);
-
     fs::write("trace.json", result).expect("Unable to write file");
 }
 
 pub struct TraceScope {
-    pub name: String,
+    pub name: &'static str,
     pub start_time: Instant,
 }
 
 impl TraceScope {
-    pub fn new(name: String) -> TraceScope {
+    pub fn new(name: &'static str) -> TraceScope {
         let start_time = Instant::now();
         TraceScope { name, start_time }
     }
@@ -38,31 +46,23 @@ impl TraceScope {
 
 impl Drop for TraceScope {
     fn drop(&mut self) {
-        let end_time = Instant::now();
-        let duration = end_time - self.start_time;
+        let duration = self.start_time.elapsed();
         let time_stamp = self.start_time - *(PROGRAM_START.lock().unwrap());
         let mut trace_buffer = TRACE_BUFFER.lock().unwrap();
-        *trace_buffer += "\t{ \"pid\":1, \"tid\":1, \"ts\":";
-        *trace_buffer += &time_stamp.as_micros().to_string();
-        *trace_buffer += ", \"dur\":";
-        *trace_buffer += &duration.as_micros().to_string();
-        *trace_buffer += ", \"ph\":\"X\", \"name\":\"";
-        *trace_buffer += &self.name;
-        *trace_buffer += "\" },\n";
+        trace_buffer.push_back((time_stamp, duration, self.name));
     }
 }
 
 #[macro_export]
 macro_rules! trace {
     ($name:expr) => {
-        let _trace_scope = simple_tracing::TraceScope::new($name.to_string());
+        let _trace_scope = simple_tracing::TraceScope::new(&($name));
     };
     () => {
-        let _trace_scope = simple_tracing::TraceScope::new(function!().to_string());
+        let _trace_scope = simple_tracing::TraceScope::new(&(function!()));
     };
 }
 
-// get the name of the current function
 #[macro_export]
 macro_rules! function {
     () => {{
