@@ -19,7 +19,7 @@ use ctor::dtor;
 fn deinit() {
     let mut result = TRACE_BUFFER.lock().unwrap().to_string();
     result += "\n\t{ \"pid\":1, \"tid\":1, \"ts\":0, \"dur\":0, \"ph\":\"X\", \"name\":\"dummy\" }\n\t],\n\t\"meta_user\": \"aras\",\n\t\"meta_cpu_count\": \"8\"\n}";
-    println!("{}", result);
+    // println!("{}", result);
 
     fs::write("trace.json", result).expect("Unable to write file");
 }
@@ -53,15 +53,25 @@ impl Drop for TraceScope {
 }
 
 #[macro_export]
-macro_rules! trace_scope {
+macro_rules! trace {
     ($name:expr) => {
         let _trace_scope = simple_tracing::TraceScope::new($name.to_string());
     };
+    () => {
+        let _trace_scope = simple_tracing::TraceScope::new(function!().to_string());
+    };
 }
 
+// get the name of the current function
 #[macro_export]
-macro_rules! brace {
-    ($body:expr) => {{
-        $body
-    }};
+macro_rules! function {
+    () => {{
+        fn f() {}
+        fn type_name_of<T>(_: T) -> &'static str {
+            std::any::type_name::<T>()
+        }
+        let name = type_name_of(f);
+        name.strip_suffix("::f").unwrap()
+    }}
 }
+
