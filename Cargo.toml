@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 lazy_static = "1.4.0"
 ctor = "0.1.19"
+itertools = "0.10.2"
