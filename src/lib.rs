@@ -74,7 +74,7 @@ macro_rules! trace {
         let _trace_scope = simple_tracing::TraceScope::new(&($name));
     };
     () => {
-        let _trace_scope = simple_tracing::TraceScope::new(&(function!()));
+        let _trace_scope = simple_tracing::TraceScope::new(&(simple_tracing::function!()));
     };
 }
 
